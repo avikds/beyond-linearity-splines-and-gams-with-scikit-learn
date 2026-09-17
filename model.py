@@ -339,8 +339,69 @@ def extrapolation_report(X, y, ages):
 
     return predictions
 
-# Step 8 - smoothing_spline (not yet solved)
-# TODO: implement
+# Step 8 - smoothing_spline
+from sklearn.linear_model import Ridge
+
+def smooth_model(alpha, n_knots=20):
+    # Build a penalized regression-spline model:
+    # SplineTransformer -> Ridge regression.
+    return make_pipeline(
+        SplineTransformer(
+            n_knots=n_knots,
+            degree=3,
+            knots="quantile",
+            include_bias=False
+        ),
+        Ridge(alpha=alpha)
+    )
+
+def effective_df(model, X):
+    # Retrieve the fitted spline transformer and ridge estimator.
+    transformer = model.named_steps["splinetransformer"]
+    ridge = model.named_steps["ridge"]
+
+    # Construct the spline basis matrix.
+    B = transformer.transform(X)
+
+    # Center each basis column before computing the effective degrees
+    # of freedom. The intercept is handled separately as unpenalized.
+    B = B - B.mean(axis=0)
+
+    # Compute the effective degrees of freedom of the penalized spline:
+    # 1 + tr((B'B + alpha I)^(-1) B'B)
+    alpha = ridge.alpha
+    n_basis = B.shape[1]
+
+    BtB = B.T @ B
+    penalty = BtB + alpha * np.eye(n_basis)
+
+    edf = 1.0 + np.trace(
+        np.linalg.inv(penalty) @ BtB
+    )
+
+    return round(float(edf), 2)
+
+def smooth_curve(X, y, alphas, cv):
+    # Evaluate the candidate smoothing penalties using cross-validation.
+    return cv_curve(smooth_model, X, y, alphas, cv)
+
+def choose_alpha(X, y, alphas, cv):
+    # Compute cross-validated MSE and standard errors for each alpha.
+    means, ses = smooth_curve(X, y, alphas, cv)
+
+    # Select the alpha with the minimum cross-validated MSE.
+    alpha_min = alphas[int(np.argmin(means))]
+
+    # Apply the one-standard-error rule, preferring the larger alpha
+    # because it corresponds to stronger smoothing.
+    alpha_1se = one_se_rule(
+        alphas,
+        means,
+        ses,
+        prefer="larger"
+    )
+
+    return alpha_min, alpha_1se
 
 # Step 9 - local_smoother (not yet solved)
 # TODO: implement
