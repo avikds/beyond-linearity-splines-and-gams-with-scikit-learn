@@ -506,8 +506,98 @@ def gam_feature_count(model, X):
 
     return transformed.shape[1]
 
-# Step 11 - partial_effects (not yet solved)
-# TODO: implement
+# Step 11 - partial_effects
+def partial_effect(model, X, column, grid_values):
+    # Create a single baseline row using the training medians for numeric
+    # columns and the training modes for categorical columns.
+    baseline = {}
+
+    for col in X.columns:
+        if pd.api.types.is_numeric_dtype(X[col]):
+            baseline[col] = X[col].median()
+        else:
+            baseline[col] = X[col].mode().iloc[0]
+
+    # Repeat the baseline row for every value in the requested grid.
+    effect_data = pd.DataFrame(
+        [baseline] * len(grid_values),
+        columns=X.columns
+    )
+
+    # Replace the selected column with the grid values.
+    effect_data[column] = grid_values
+
+    # Predict along the grid and center the predictions around zero.
+    predictions = model.predict(effect_data)
+    centered = predictions - np.mean(predictions)
+
+    return np.round(np.asarray(centered).ravel(), 2)
+
+def education_effect(model, X):
+    # Evaluate education levels in sorted order while holding age and year
+    # at their respective training medians.
+    levels = sorted(X["education"].unique())
+
+    baseline = {}
+    for col in X.columns:
+        if pd.api.types.is_numeric_dtype(X[col]):
+            baseline[col] = X[col].median()
+        else:
+            baseline[col] = X[col].mode().iloc[0]
+
+    effect_data = pd.DataFrame(
+        [baseline] * len(levels),
+        columns=X.columns
+    )
+    effect_data["education"] = levels
+
+    # Center the predictions so the education effects are relative effects.
+    predictions = model.predict(effect_data)
+    centered = predictions - np.mean(predictions)
+
+    return {
+        level: round(float(effect), 2)
+        for level, effect in zip(levels, centered)
+    }
+
+def gam_summary(model, X):
+    # Compute the centered partial effect of age over the standard age grid.
+    age_values = age_grid()["age"].to_numpy()
+    age_effect = partial_effect(
+        model,
+        X,
+        "age",
+        age_values
+    )
+
+    # Compute the centered partial effect of year for every integer year
+    # from 2003 through 2009.
+    year_values = np.arange(2003, 2010)
+    year_effect = partial_effect(
+        model,
+        X,
+        "year",
+        year_values
+    )
+
+    # Compute centered education effects over all sorted education levels.
+    edu_effects = education_effect(model, X)
+    edu_values = np.array(list(edu_effects.values()))
+
+    return {
+        "age_range": round(
+            float(np.max(age_effect) - np.min(age_effect)),
+            1
+        ),
+        "year_range": round(
+            float(np.max(year_effect) - np.min(year_effect)),
+            1
+        ),
+        "education_range": round(
+            float(np.max(edu_values) - np.min(edu_values)),
+            1
+        )
+    }
 
 # Step 12 - logistic_gam (not yet solved)
 # TODO: implement
