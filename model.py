@@ -203,8 +203,53 @@ def curve_on_grid(model, grid):
 
     return np.round(np.asarray(predictions).ravel(), 2)
 
-# Step 5 - step_functions (not yet solved)
-# TODO: implement
+# Step 5 - step_functions
+from sklearn.preprocessing import KBinsDiscretizer
+
+def step_model(n_bins):
+    # Discretize age into equally spaced bins and fit a linear regression
+    # to the resulting one-hot encoded step indicators.
+    return make_pipeline(
+        KBinsDiscretizer(
+            n_bins=n_bins,
+            encode="onehot-dense",
+            strategy="uniform"
+        ),
+        LinearRegression()
+    )
+
+def step_curve(X, y, bins, cv):
+    # Evaluate the candidate numbers of bins using cross-validated MSE.
+    return cv_curve(step_model, X, y, bins, cv)
+
+def choose_bins(X, y, bins, cv):
+    # Compute cross-validated mean MSE for each candidate bin count.
+    means, _ = step_curve(X, y, bins, cv)
+
+    # Choose the bin count with the minimum cross-validated MSE.
+    bins_min = bins[int(np.argmin(means))]
+
+    # Apply the one-standard-error rule, preferring the smaller
+    # number of bins.
+    bins_1se = one_se_rule(bins, means, _, prefer="smaller")
+
+    return bins_min, bins_1se
+
+def bin_edges(model):
+    # Retrieve the fitted bin edges from the KBinsDiscretizer.
+    discretizer = model.named_steps["kbinsdiscretizer"]
+    edges = discretizer.bin_edges_[0]
+
+    return [round(float(edge), 1) for edge in edges]
+
+def step_levels(model, grid):
+    # Predict the fitted step-function values on the supplied grid.
+    predictions = model.predict(grid)
+
+    # Round the predictions first, then remove duplicates and sort them.
+    levels = np.unique(np.round(np.asarray(predictions).ravel(), 1))
+
+    return [float(level) for level in levels]
 
 # Step 6 - spline_regression (not yet solved)
 # TODO: implement
