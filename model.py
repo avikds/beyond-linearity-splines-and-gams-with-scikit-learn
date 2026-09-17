@@ -446,8 +446,65 @@ def roughness(curve):
 
     return round(float(np.mean(np.abs(second_differences))), 3)
 
-# Step 10 - gam_pipeline (not yet solved)
-# TODO: implement
+# Step 10 - gam_pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+
+def gam_preprocessor(age_knots=5, year_knots=4):
+    # Build separate transformations for age, year, and education.
+    return ColumnTransformer(
+        transformers=[
+            (
+                "age",
+                SplineTransformer(
+                    n_knots=age_knots,
+                    degree=3,
+                    knots="quantile",
+                    include_bias=False
+                ),
+                ["age"]
+            ),
+            (
+                "year",
+                SplineTransformer(
+                    n_knots=year_knots,
+                    degree=3,
+                    knots="uniform",
+                    include_bias=False
+                ),
+                ["year"]
+            ),
+            (
+                "education",
+                OneHotEncoder(drop="first"),
+                ["education"]
+            )
+        ]
+    )
+
+def gam_model(age_knots=5, year_knots=4):
+    # Apply the GAM preprocessing and then fit a linear regression
+    # to the resulting additive feature representation.
+    return make_pipeline(
+        gam_preprocessor(age_knots, year_knots),
+        LinearRegression()
+    )
+
+def gam_xy(df):
+    # Use age, year, and education as predictors and wage as the target.
+    X = df[["age", "year", "education"]]
+    y = df["wage"]
+
+    return X, y
+
+def gam_feature_count(model, X):
+    # Retrieve the fitted ColumnTransformer from the pipeline.
+    preprocessor = model.named_steps["columntransformer"]
+
+    # Transform the data and count the resulting feature columns.
+    transformed = preprocessor.transform(X)
+
+    return transformed.shape[1]
 
 # Step 11 - partial_effects (not yet solved)
 # TODO: implement
