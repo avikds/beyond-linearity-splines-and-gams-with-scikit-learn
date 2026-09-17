@@ -752,6 +752,61 @@ def curves_table(models, grid):
         index=grid["age"].to_numpy()
     )
 
-# Step 14 - test_comparison (not yet solved)
-# TODO: implement
+# Step 14 - test_comparison
+from sklearn.metrics import mean_squared_error
+
+def test_rmse(models, X_test, y_test):
+    # Compute the test-set RMSE for every fitted age-only model.
+    rmse = {}
+
+    for name, (model, _) in models.items():
+        predictions = model.predict(X_test)
+
+        # Compute RMSE explicitly so the code remains compatible with
+        # different scikit-learn versions.
+        score = np.sqrt(
+            mean_squared_error(y_test, predictions)
+        )
+
+        rmse[name] = round(float(score), 2)
+
+    return rmse
+
+def gam_test_rmse(train, test):
+    # Prepare the training and test data for the full GAM.
+    X_train, y_train = gam_xy(train)
+    X_test, y_test = gam_xy(test)
+
+    # Fit the GAM on the training data.
+    model = gam_model().fit(X_train, y_train)
+
+    # Evaluate the fitted GAM on the test data.
+    predictions = model.predict(X_test)
+
+    score = np.sqrt(
+        mean_squared_error(y_test, predictions)
+    )
+
+    return round(float(score), 2)
+
+def comparison_lines(rmse_by_model, gam_rmse):
+    # Sort age-only models by increasing test RMSE.
+    sorted_models = sorted(
+        rmse_by_model.items(),
+        key=lambda item: item[1][0]
+    )
+
+    # Format one comparison line for each age-only model.
+    lines = [
+        f"{name:8s} rmse={rmse:6.2f} setting={setting}"
+        for name, (rmse, setting) in sorted_models
+    ]
+
+    # Append the full GAM as the final comparison line.
+    lines.append(
+        f"{'gam':8s} rmse={gam_rmse:6.2f} "
+        f"setting=age+year+education"
+    )
+
+    return lines
 
