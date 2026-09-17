@@ -403,8 +403,48 @@ def choose_alpha(X, y, alphas, cv):
 
     return alpha_min, alpha_1se
 
-# Step 9 - local_smoother (not yet solved)
-# TODO: implement
+# Step 9 - local_smoother
+from sklearn.neighbors import KNeighborsRegressor
+
+def local_model(span, n_train):
+    # Use the nearest span fraction of the training observations.
+    # At least two neighbors are used for every prediction.
+    n_neighbors = max(2, int(round(span * n_train)))
+
+    return KNeighborsRegressor(
+        n_neighbors=n_neighbors
+    )
+
+def local_curve(X, y, spans, cv):
+    # Build a KNN regression model for each span using the number
+    # of observations in X as the training-set size.
+    make_model = lambda span: local_model(span, len(X))
+
+    return cv_curve(make_model, X, y, spans, cv)
+
+def choose_span(X, y, spans, cv):
+    # Compute cross-validated MSE and standard errors for each span.
+    means, ses = local_curve(X, y, spans, cv)
+
+    # Select the span with the minimum cross-validated MSE.
+    span_min = spans[int(np.argmin(means))]
+
+    # Apply the one-standard-error rule, preferring the larger span
+    # because it produces a smoother local fit.
+    span_1se = one_se_rule(
+        spans,
+        means,
+        ses,
+        prefer="larger"
+    )
+
+    return span_min, span_1se
+
+def roughness(curve):
+    # Measure curve roughness using the mean absolute second difference.
+    second_differences = np.diff(curve, n=2)
+
+    return round(float(np.mean(np.abs(second_differences))), 3)
 
 # Step 10 - gam_pipeline (not yet solved)
 # TODO: implement
