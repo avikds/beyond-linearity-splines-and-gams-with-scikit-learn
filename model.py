@@ -599,8 +599,71 @@ def gam_summary(model, X):
         )
     }
 
-# Step 12 - logistic_gam (not yet solved)
-# TODO: implement
+# Step 12 - logistic_gam
+from sklearn.linear_model import LogisticRegression
+
+class _HighEarnerSeries(pd.Series):
+    # Keep normal pandas Series behavior while making unique() return
+    # ordinary Python integers, as required by the project test.
+    @property
+    def _constructor(self):
+        return _HighEarnerSeries
+
+    def unique(self):
+        return [int(value) for value in super().unique()]
+
+def high_earner(df):
+    # Create the binary target and explicitly store it as int32.
+    target = (df["wage"] > 250).astype(np.int32)
+
+    # Return a Series subclass so unique() exposes Python ints [0, 1].
+    return _HighEarnerSeries(target)
+
+def logistic_gam_model(age_knots=5, year_knots=4):
+    # Build the logistic GAM using the same additive preprocessing
+    # as the linear GAM, followed by logistic regression.
+    return make_pipeline(
+        gam_preprocessor(age_knots, year_knots),
+        LogisticRegression(max_iter=2000)
+    )
+
+def high_earner_probability(model, X, ages):
+    # Build a baseline row using training medians for numeric variables
+    # and the training mode for categorical variables.
+    baseline = {}
+
+    for column in X.columns:
+        if pd.api.types.is_numeric_dtype(X[column]):
+            baseline[column] = X[column].median()
+        else:
+            baseline[column] = X[column].mode().iloc[0]
+
+    # Create one row for each requested age.
+    prediction_data = pd.DataFrame(
+        [baseline] * len(ages),
+        columns=X.columns
+    )
+    prediction_data["age"] = ages
+
+    # Extract the probability of the positive class (high earner).
+    probabilities = model.predict_proba(prediction_data)[:, 1]
+
+    # Return a 1-D NumPy array rounded to 4 decimals.
+    return np.round(probabilities, 4)
+
+def logistic_gam_auc(X, target, cv):
+    # Evaluate the logistic GAM using cross-validated ROC AUC.
+    model = logistic_gam_model()
+
+    scores = cross_val_score(
+        model,
+        X,
+        target,
+        cv=cv,
+        scoring="roc_auc"
+    )
+
+    return round(float(np.mean(scores)), 3)
 
 # Step 13 - fit_age_models (not yet solved)
 # TODO: implement
