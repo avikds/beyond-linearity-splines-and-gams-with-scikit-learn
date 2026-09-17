@@ -62,8 +62,65 @@ def age_grid(lo=18, hi=80, n=63):
         "age": np.linspace(lo, hi, n)
     })
 
-# Step 3 - cv_tools (not yet solved)
-# TODO: implement
+# Step 3 - cv_tools
+from sklearn.model_selection import cross_val_score
+
+def cv_mse(model, X, y, cv):
+    # cross_val_score returns negative MSE because sklearn's scoring
+    # convention treats larger scores as better.
+    scores = cross_val_score(
+        model,
+        X,
+        y,
+        cv=cv,
+        scoring="neg_mean_squared_error"
+    )
+
+    # Convert negative MSE scores into positive MSE values.
+    fold_mse = -scores
+
+    # Compute the mean MSE and its standard error across folds.
+    mean_mse = np.mean(fold_mse)
+    se_mse = np.std(fold_mse, ddof=1) / np.sqrt(len(fold_mse))
+
+    return round(mean_mse, 1), round(se_mse, 1)
+
+def cv_curve(make_model, X, y, values, cv):
+    # Evaluate each hyperparameter/value using cross-validated MSE.
+    means = []
+    ses = []
+
+    for value in values:
+        model = make_model(value)
+        mean_mse, se_mse = cv_mse(model, X, y, cv)
+
+        means.append(mean_mse)
+        ses.append(se_mse)
+
+    return means, ses
+
+def one_se_rule(values, means, ses, prefer="smaller"):
+    # Identify the setting with the lowest cross-validated mean MSE.
+    best_index = int(np.argmin(means))
+    best_mean = means[best_index]
+    best_se = ses[best_index]
+
+    # The one-standard-error threshold is measured from the best mean.
+    threshold = best_mean + best_se
+
+    # Keep all settings whose mean error is within one SE of the best.
+    eligible = [
+        value
+        for value, mean in zip(values, means)
+        if mean <= threshold
+    ]
+
+    if prefer == "smaller":
+        return min(eligible)
+    elif prefer == "larger":
+        return max(eligible)
+    else:
+        raise ValueError("prefer must be either 'smaller' or 'larger'")
 
 # Step 4 - polynomial_regression (not yet solved)
 # TODO: implement
