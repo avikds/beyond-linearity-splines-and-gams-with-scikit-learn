@@ -122,8 +122,86 @@ def one_se_rule(values, means, ses, prefer="smaller"):
     else:
         raise ValueError("prefer must be either 'smaller' or 'larger'")
 
-# Step 4 - polynomial_regression (not yet solved)
-# TODO: implement
+# Step 4 - polynomial_regression
+from scipy.stats import f as f_dist
+
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+
+def poly_model(degree):
+    # Scale age before generating polynomial features so that higher powers
+    # remain numerically well-behaved.
+    return make_pipeline(
+        StandardScaler(),
+        PolynomialFeatures(degree, include_bias=False),
+        LinearRegression()
+    )
+
+def poly_curve(X, y, degrees, cv):
+    # Evaluate polynomial degrees using the cross-validation helper
+    # implemented in Step 3.
+    return cv_curve(poly_model, X, y, degrees, cv)
+
+def anova_degrees(X, y, max_degree):
+    # Compare each degree-d polynomial with the nested degree-(d-1)
+    # polynomial using the standard partial F-test.
+    n = len(y)
+    results = []
+
+    for d in range(2, max_degree + 1):
+        model_prev = poly_model(d - 1)
+        model_curr = poly_model(d)
+
+        model_prev.fit(X, y)
+        model_curr.fit(X, y)
+
+        # Residual sum of squares for the two nested models.
+        residual_prev = y - model_prev.predict(X)
+        residual_curr = y - model_curr.predict(X)
+
+        rss_prev = np.sum(residual_prev ** 2)
+        rss_curr = np.sum(residual_curr ** 2)
+
+        # Since the two models differ by one parameter, the numerator
+        # degrees of freedom of the F-test is 1.
+        F = ((rss_prev - rss_curr) / 1) / (rss_curr / (n - d - 1))
+
+        # Survival function gives P(F_{1, n-d-1} >= observed F).
+        p_value = f_dist.sf(F, 1, n - d - 1)
+
+        results.append(
+            (d, round(F, 2), round(p_value, 4))
+        )
+
+    return results
+
+def choose_degree(X, y, degrees, cv, alpha=0.05):
+    # Select the degree with the lowest cross-validated MSE.
+    means, _ = poly_curve(X, y, degrees, cv)
+    degree_min = degrees[int(np.argmin(means))]
+
+    # Perform the nested polynomial F-tests up to the largest requested
+    # degree. The ANOVA selection stops at the first non-significant test.
+    max_degree = max(degrees)
+    anova_results = anova_degrees(X, y, max_degree)
+
+    degree_anova = 1
+
+    for d, _, p_value in anova_results:
+        if p_value < alpha:
+            degree_anova = d
+        else:
+            break
+
+    return degree_min, degree_anova
+
+def curve_on_grid(model, grid):
+    # Generate predictions on the supplied age grid and return them as
+    # a one-dimensional NumPy array rounded to two decimal places.
+    predictions = model.predict(grid)
+
+    return np.round(np.asarray(predictions).ravel(), 2)
 
 # Step 5 - step_functions (not yet solved)
 # TODO: implement
