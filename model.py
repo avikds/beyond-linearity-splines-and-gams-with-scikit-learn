@@ -665,8 +665,92 @@ def logistic_gam_auc(X, target, cv):
 
     return round(float(np.mean(scores)), 3)
 
-# Step 13 - fit_age_models (not yet solved)
-# TODO: implement
+# Step 13 - fit_age_models
+def fit_age_models(X, y, cv):
+    # Candidate settings for each age-only model.
+    poly_degrees = [1, 2, 3, 4, 5, 6]
+    step_bins = [2, 4, 8, 16]
+    spline_knots = [3, 4, 5, 6, 8, 12]
+    smooth_alphas = [0.001, 0.1, 1.0, 10.0, 100.0, 1000.0]
+    local_spans = [0.02, 0.05, 0.1, 0.2, 0.4, 0.7]
+
+    # Linear model: fixed degree 1.
+    linear = poly_model(1).fit(X, y)
+
+    # Polynomial model: use the ANOVA-selected degree.
+    _, poly_degree = choose_degree(
+        X,
+        y,
+        poly_degrees,
+        cv
+    )
+    poly = poly_model(poly_degree).fit(X, y)
+
+    # Step function: use the one-SE setting, preferring fewer bins.
+    _, step_bins_1se = choose_bins(
+        X,
+        y,
+        step_bins,
+        cv
+    )
+    step = step_model(step_bins_1se).fit(X, y)
+
+    # Regression spline: use the one-SE knot count, preferring fewer knots.
+    _, spline_knots_1se = choose_knots(
+        X,
+        y,
+        spline_knots,
+        cv
+    )
+    spline = spline_model(spline_knots_1se).fit(X, y)
+
+    # Penalized smoothing spline: use the one-SE alpha, preferring
+    # larger alpha values (more smoothing).
+    _, smooth_alpha_1se = choose_alpha(
+        X,
+        y,
+        smooth_alphas,
+        cv
+    )
+    smooth = smooth_model(
+        smooth_alpha_1se,
+        n_knots=20
+    ).fit(X, y)
+
+    # Local nearest-neighbor smoother: use the one-SE span, preferring
+    # the larger span (more smoothing).
+    _, local_span_1se = choose_span(
+        X,
+        y,
+        local_spans,
+        cv
+    )
+    local = local_model(
+        local_span_1se,
+        len(X)
+    ).fit(X, y)
+
+    return {
+        "linear": (linear, 1),
+        "poly": (poly, poly_degree),
+        "step": (step, step_bins_1se),
+        "spline": (spline, spline_knots_1se),
+        "smooth": (smooth, smooth_alpha_1se),
+        "local": (local, local_span_1se)
+    }
+
+def curves_table(models, grid):
+    # Build a table of fitted curves evaluated on the supplied grid.
+    table = {}
+
+    for name, (model, _) in models.items():
+        table[name] = curve_on_grid(model, grid)
+
+    # Use the age values from the grid as the DataFrame index.
+    return pd.DataFrame(
+        table,
+        index=grid["age"].to_numpy()
+    )
 
 # Step 14 - test_comparison (not yet solved)
 # TODO: implement
