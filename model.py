@@ -251,8 +251,49 @@ def step_levels(model, grid):
 
     return [float(level) for level in levels]
 
-# Step 6 - spline_regression (not yet solved)
-# TODO: implement
+# Step 6 - spline_regression
+from sklearn.preprocessing import SplineTransformer
+
+def spline_model(n_knots, degree=3, extrapolation="constant"):
+    # Build a regression-spline model:
+    # SplineTransformer -> LinearRegression.
+    return make_pipeline(
+        SplineTransformer(
+            n_knots=n_knots,
+            degree=degree,
+            knots="quantile",
+            extrapolation=extrapolation,
+            include_bias=False
+        ),
+        LinearRegression()
+    )
+
+def spline_basis_size(model, X):
+    # Get the fitted spline transformer from the pipeline.
+    transformer = model.named_steps["splinetransformer"]
+
+    # Transform a few rows and use the resulting matrix width to determine
+    # the number of spline basis columns.
+    n_rows = min(5, len(X))
+    transformed = transformer.transform(X.iloc[:n_rows])
+
+    return transformed.shape[1]
+
+def spline_curve(X, y, knot_counts, cv):
+    # Evaluate the candidate knot counts using cross-validated MSE.
+    return cv_curve(spline_model, X, y, knot_counts, cv)
+
+def choose_knots(X, y, knot_counts, cv):
+    # Compute cross-validated means and standard errors for each knot count.
+    means, ses = spline_curve(X, y, knot_counts, cv)
+
+    # Select the knot count with the lowest cross-validated MSE.
+    k_min = knot_counts[int(np.argmin(means))]
+
+    # Apply the one-standard-error rule, preferring fewer knots.
+    k_1se = one_se_rule(knot_counts, means, ses, prefer="smaller")
+
+    return k_min, k_1se
 
 # Step 7 - extrapolation (not yet solved)
 # TODO: implement
